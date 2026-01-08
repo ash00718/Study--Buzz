@@ -116,7 +116,6 @@ StudyBuzz/
 ```
 streamlit==1.31.0
 requests==2.31.0
-openai==1.40.0
 ```
 
 ---
