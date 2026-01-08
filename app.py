@@ -59,9 +59,6 @@ def init_session_state():
         'chat_messages': [],
         'show_hints': {},
         'explanations': {},
-        # Debug
-        'debug_mode': False,
-        'last_api_error': None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -309,16 +306,6 @@ def get_theme_css():
             background: linear-gradient(135deg, #2d2d44 0%, #3d3d5c 100%);
             margin-right: 15%;
         }
-        
-        .debug-box {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid #ef4444;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-        }
         </style>
         """
     else:
@@ -429,9 +416,6 @@ def call_ai_json(prompt, system_msg, max_retries=3, max_tokens=2000):
             
             content = response.choices[0].message.content.strip()
             
-            if st.session_state.debug_mode:
-                st.markdown(f"<div class='debug-box'><strong>Raw API Response:</strong><br>{content[:500]}...</div>", unsafe_allow_html=True)
-            
             # Clean up common JSON formatting issues
             if content.startswith("```json"):
                 content = content[7:]
@@ -447,28 +431,18 @@ def call_ai_json(prompt, system_msg, max_retries=3, max_tokens=2000):
                 return data
             except json.JSONDecodeError:
                 # Try to repair truncated JSON
-                if st.session_state.debug_mode:
-                    st.warning("Attempting to repair truncated JSON...")
                 data = repair_truncated_json(content)
                 if data:
-                    if st.session_state.debug_mode:
-                        st.success("JSON repair successful!")
                     return data
                 raise json.JSONDecodeError("Could not repair JSON", content, 0)
             
-        except json.JSONDecodeError as e:
-            st.session_state.last_api_error = f"JSON Parse Error: {str(e)}"
-            if st.session_state.debug_mode:
-                st.error(f"JSON Parse Error (attempt {attempt + 1}): {str(e)}")
+        except json.JSONDecodeError:
             if attempt < max_retries - 1:
                 time.sleep(1)
                 continue
             return None
             
-        except Exception as e:
-            st.session_state.last_api_error = f"API Error: {str(e)}"
-            if st.session_state.debug_mode:
-                st.error(f"API Error (attempt {attempt + 1}): {str(e)}")
+        except Exception:
             if attempt < max_retries - 1:
                 time.sleep(1)
                 continue
@@ -493,10 +467,7 @@ def call_ai_text(prompt, system_msg="You are a helpful educational assistant."):
         content = response.choices[0].message.content.strip()
         return content
         
-    except Exception as e:
-        st.session_state.last_api_error = f"API Error: {str(e)}"
-        if st.session_state.debug_mode:
-            st.error(f"API Error: {str(e)}")
+    except Exception:
         return None
 
 # ============== QUIZ GENERATION FUNCTIONS ==============
@@ -794,12 +765,6 @@ if st.session_state.page == "home":
         st.session_state.grade_level = st.selectbox("🎓 Grade Level", ["Elementary", "Middle School", "High School", "College", "Professional"])
         
         st.markdown("---")
-        st.session_state.debug_mode = st.checkbox("🐛 Debug Mode", value=st.session_state.debug_mode)
-        
-        if st.session_state.last_api_error:
-            st.error(f"Last Error: {st.session_state.last_api_error}")
-        
-        st.markdown("---")
         st.markdown("### About")
         st.markdown("Powered by **Pollinations.AI** 🌸")
 
@@ -899,18 +864,6 @@ elif st.session_state.page == "study":
         st.markdown("---")
         st.markdown(f"**Subject:** {st.session_state.subject}")
         st.markdown(f"**Level:** {st.session_state.grade_level}")
-        
-        st.markdown("---")
-        st.session_state.debug_mode = st.checkbox("🐛 Debug Mode", value=st.session_state.debug_mode)
-        
-        # API Test button
-        if st.button("🧪 Test API Connection"):
-            with st.spinner("Testing..."):
-                test_result = call_ai_text("Say 'API connection successful!' in exactly those words.")
-                if test_result:
-                    st.success(f"✅ {test_result[:100]}")
-                else:
-                    st.error("❌ API connection failed")
     
     # Header
     mode_icons = {"Quiz": "📝", "Flashcards": "🎴", "Study Guide": "📖", "All Three": "🚀"}
