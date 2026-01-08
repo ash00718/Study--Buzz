@@ -62,23 +62,18 @@ def call_ai(prompt):
     """Call Pollinations AI API with fast models and fallbacks"""
     import time
     
-    url = "https://gen.pollinations.ai/v1/chat/completions"
+    # Use text.pollinations.ai - no auth required
+    url = "https://text.pollinations.ai/"
     
-    # Authorization header required for gen.pollinations.ai
-    headers = {
-        "Authorization": "Bearer pollinations",
-        "Content-Type": "application/json"
-    }
-    
-    # Priority: openai-fast -> gemini-fast -> mistral -> openai
-    models = ["openai-fast", "gemini-fast", "mistral", "openai"]
+    # Priority: openai-fast -> mistral -> openai
+    models = ["openai-fast", "mistral", "openai"]
     
     for i, model in enumerate(models):
         log_debug(f"Trying model: {model}")
         
         # Add delay between retries to avoid rate limits
         if i > 0:
-            time.sleep(2)
+            time.sleep(3)
         
         try:
             payload = {
@@ -87,16 +82,15 @@ def call_ai(prompt):
                     {"role": "user", "content": prompt}
                 ],
                 "model": model,
-                "max_tokens": 2000
+                "seed": random.randint(1, 10000)
             }
             
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, json=payload, timeout=90)
             
             log_debug(f"Status: {response.status_code}")
             
             if response.status_code == 200:
-                data = response.json()
-                text = data['choices'][0]['message']['content'].strip()
+                text = response.text.strip()
                 
                 if text and len(text) > 50:
                     log_debug(f"Success with {model}! {len(text)} chars")
@@ -105,11 +99,11 @@ def call_ai(prompt):
                     log_debug(f"Empty response from {model}, trying next...")
                     continue
             elif response.status_code == 429:
-                log_debug(f"Rate limited on {model}, waiting 5s...")
-                time.sleep(5)
+                log_debug(f"Rate limited on {model}, waiting 10s...")
+                time.sleep(10)
                 continue
             else:
-                log_debug(f"Error {response.status_code}: {response.text[:100]}")
+                log_debug(f"Error {response.status_code}, trying next...")
                 continue
                     
         except requests.exceptions.Timeout:
