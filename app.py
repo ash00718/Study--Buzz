@@ -6,13 +6,6 @@ import time
 import random
 from datetime import datetime, timedelta
 from io import BytesIO
-from openai import OpenAI
-
-# Initialize Pollinations client
-client = OpenAI(
-    base_url="https://text.pollinations.ai/",
-    api_key="pollinations"
-)
 
 # ============== SESSION STATE INITIALIZATION ==============
 def init_session_state():
@@ -358,17 +351,29 @@ def go_home():
 
 def call_ai(prompt, system_msg="You are a helpful educational assistant."):
     try:
-        response = client.chat.completions.create(
-            model="openai",
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7
+        response = requests.post(
+            "https://text.pollinations.ai/",
+            json={
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt}
+                ],
+                "model": "openai",
+                "seed": random.randint(1, 10000),
+                "jsonMode": False
+            },
+            timeout=120
         )
-        return response.choices[0].message.content
+        if response.status_code == 200:
+            return response.text
+        else:
+            st.error(f"API Error: Status {response.status_code}")
+            return None
+    except requests.exceptions.Timeout:
+        st.error("Request timed out. Please try again.")
+        return None
     except Exception as e:
-        st.error(f"AI Error: {str(e)}")
+        st.error(f"Error: {str(e)}")
         return None
 
 # ============== HOME PAGE ==============
