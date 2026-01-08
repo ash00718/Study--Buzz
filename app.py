@@ -62,6 +62,8 @@ def call_ai(prompt):
     """Call Pollinations AI API with fast models and fallbacks"""
     import time
     
+    url = "https://gen.pollinations.ai/v1/chat/completions"
+    
     # Priority: openai-fast -> gemini-fast -> mistral -> openai
     models = ["openai-fast", "gemini-fast", "mistral", "openai"]
     
@@ -73,32 +75,22 @@ def call_ai(prompt):
             time.sleep(2)
         
         try:
-            # Using the newer gen.pollinations.ai endpoint
-            response = requests.post(
-                "https://gen.pollinations.ai/openai/chat/completions",
-                json={
-                    "messages": [
-                        {"role": "system", "content": "You are a helpful study assistant. Follow the exact format requested. Be concise but thorough."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "model": model
-                },
-                headers={
-                    "Content-Type": "application/json"
-                },
-                timeout=60
-            )
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "You are a helpful study assistant. Follow the exact format requested."},
+                    {"role": "user", "content": prompt}
+                ],
+                "model": model,
+                "json_mode": False
+            }
+            
+            response = requests.post(url, json=payload, timeout=60)
             
             log_debug(f"Status: {response.status_code}")
             
             if response.status_code == 200:
-                try:
-                    # New endpoint returns JSON in OpenAI format
-                    data = response.json()
-                    text = data["choices"][0]["message"]["content"].strip()
-                except:
-                    # Fallback to raw text
-                    text = response.text.strip()
+                data = response.json()
+                text = data['choices'][0]['message']['content'].strip()
                 
                 if text and len(text) > 50:
                     log_debug(f"Success with {model}! {len(text)} chars")
@@ -111,7 +103,7 @@ def call_ai(prompt):
                 time.sleep(5)
                 continue
             else:
-                log_debug(f"Error {response.status_code} from {model}, trying next...")
+                log_debug(f"Error {response.status_code}: {response.text[:100]}")
                 continue
                     
         except requests.exceptions.Timeout:
@@ -121,7 +113,7 @@ def call_ai(prompt):
             log_debug(f"Error with {model}: {str(e)}")
             continue
     
-    log_debug("All models failed! You may be rate limited. Wait a minute and try again.")
+    log_debug("All models failed! Wait a minute and try again.")
     return None
 
 def parse_quiz(text):
