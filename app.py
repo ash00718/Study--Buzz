@@ -59,43 +59,51 @@ def log_debug(msg):
         st.session_state.debug_log = st.session_state.debug_log[-20:]
 
 def call_ai(prompt):
-    """Call Pollinations AI API"""
-    log_debug(f"Calling API with prompt length: {len(prompt)}")
+    """Call Pollinations AI API with fast models and fallbacks"""
     
-    try:
-        response = requests.post(
-            "https://text.pollinations.ai/",
-            json={
-                "messages": [
-                    {"role": "system", "content": "You are a helpful study assistant. Follow the format exactly."},
-                    {"role": "user", "content": prompt}
-                ],
-                "model": "openai",
-                "seed": random.randint(1, 10000)
-            },
-            timeout=120
-        )
+    # Priority: openai-fast (fastest) -> mistral (reliable) -> openai (slow but smart)
+    models = ["openai-fast", "mistral", "openai"]
+    
+    for model in models:
+        log_debug(f"Trying model: {model}")
         
-        log_debug(f"Response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            text = response.text.strip()
-            log_debug(f"Response length: {len(text)} chars")
-            if text:
-                return text
-            else:
-                log_debug("Empty response received")
-                return None
-        else:
-            log_debug(f"Error: {response.status_code}")
-            return None
+        try:
+            response = requests.post(
+                "https://text.pollinations.ai/",
+                json={
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful study assistant. Follow the exact format requested. Be concise but thorough."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "model": model,
+                    "seed": random.randint(1, 10000)
+                },
+                timeout=60
+            )
             
-    except requests.exceptions.Timeout:
-        log_debug("TIMEOUT after 120 seconds")
-        return None
-    except Exception as e:
-        log_debug(f"Exception: {str(e)}")
-        return None
+            log_debug(f"Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                text = response.text.strip()
+                if text and len(text) > 50:
+                    log_debug(f"Success with {model}! {len(text)} chars")
+                    return text
+                else:
+                    log_debug(f"Empty response from {model}, trying next...")
+                    continue
+            else:
+                log_debug(f"Error {response.status_code} from {model}, trying next...")
+                continue
+                    
+        except requests.exceptions.Timeout:
+            log_debug(f"Timeout with {model}, trying next...")
+            continue
+        except Exception as e:
+            log_debug(f"Error with {model}: {str(e)}")
+            continue
+    
+    log_debug("All models failed!")
+    return None
 
 def parse_quiz(text):
     """Parse quiz text into questions"""
@@ -154,7 +162,7 @@ with st.sidebar:
     study_mode = st.selectbox("Study Mode", ["Quiz", "Flashcards", "Study Guide", "All Three"])
     difficulty = st.select_slider("Difficulty", ["Easy", "Medium", "Hard"])
     num_questions = st.slider("Questions", 3, 10, 5)
-    num_flashcards = st.slider("Flashcards", 5, 15, 8)
+    num_flashcards = st.slider("Flashcards", 3, 15, 8)
     
     st.markdown("---")
     show_debug = st.checkbox("Show Debug Log")
@@ -198,23 +206,17 @@ if generate_btn:
         # Generate Quiz
         if study_mode in ["Quiz", "All Three"]:
             with st.spinner("📝 Generating quiz..."):
-                prompt = f"""Create a {difficulty} quiz about {topic} with exactly {num_questions} questions.
+                prompt = f"""Create a {difficulty} difficulty quiz about {topic} with {num_questions} multiple choice questions.
 
-Q1: [Write question here]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct Answer: [Letter]
+Format each question exactly like this:
+Q1: [Question text]
+A) [Option]
+B) [Option]
+C) [Option]
+D) [Option]
+Correct Answer: [A, B, C, or D]
 
-Q2: [Write question here]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct Answer: [Letter]
-
-Continue for all {num_questions} questions. Follow this exact format."""
+Generate all {num_questions} questions now."""
                 
                 result = call_ai(prompt)
                 if result:
@@ -235,6 +237,7 @@ Continue for all {num_questions} questions. Follow this exact format."""
             with st.spinner("🎴 Generating flashcards..."):
                 prompt = f"""Create {num_flashcards} flashcards about {topic}.
 
+Format each card exactly like this:
 CARD 1
 Front: [Term or question]
 Back: [Definition or answer]
@@ -243,7 +246,7 @@ CARD 2
 Front: [Term or question]
 Back: [Definition or answer]
 
-Continue for all {num_flashcards} cards. Follow this exact format."""
+Generate all {num_flashcards} flashcards now."""
                 
                 result = call_ai(prompt)
                 if result:
@@ -262,11 +265,15 @@ Continue for all {num_flashcards} cards. Follow this exact format."""
         # Generate Study Guide
         if study_mode in ["Study Guide", "All Three"]:
             with st.spinner("📖 Generating study guide..."):
-                prompt = f"""Create a study guide about {topic} with:
+                prompt = f"""Create a comprehensive study guide about {topic}.
+
+Include:
 1. Overview (2-3 sentences)
-2. Key Concepts (5 important points)
-3. Important Terms
-4. Study Tips"""
+2. Key Concepts (5 main points with explanations)
+3. Important Terms and Definitions
+4. Study Tips
+
+Make it clear and helpful for students."""
                 
                 result = call_ai(prompt)
                 if result:
